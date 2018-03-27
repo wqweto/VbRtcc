@@ -66,7 +66,7 @@ typedef struct ctx_t {
 #define ALLOC_SIZE 99999
 
 /* depends on the init string */
-#define TOK_STR_SIZE 48
+#define TOK_STR_SIZE 59
 #define TOK_IDENT    0x100
 #define TOK_INT      0x100
 #define TOK_IF       0x120
@@ -75,8 +75,10 @@ typedef struct ctx_t {
 #define TOK_BREAK    0x190
 #define TOK_RETURN   0x1c0
 #define TOK_FOR      0x1f8
-#define TOK_DEFINE   0x218
-#define TOK_MAIN     0x250
+#define TOK_SHORT    0x218
+#define TOK_EMIT     0x248
+#define TOK_DEFINE   0x270
+#define TOK_MAIN     0x2a8
 
 #define TOK_DUMMY   1
 #define TOK_NUM     2
@@ -107,7 +109,8 @@ compile(pctx_t ctx, int pinp, int wParam, int lParam)
         memcpy(ctx->t0, t0, CONST_T0_SIZE);
         ctx->glo = ctx->t0 + CONST_T0_SIZE;
         char stk0[] = { ' ', 'i', 'n', 't', ' ', 'i', 'f', ' ', 'e', 'l', 's', 'e', ' ', 'w', 'h', 'i', 'l', 'e', ' ', 'b', 'r', 'e', 'a', 'k', 
-            ' ', 'r', 'e', 't', 'u', 'r', 'n', ' ', 'f', 'o', 'r', ' ', 'd', 'e', 'f', 'i', 'n', 'e', ' ', 'm', 'a', 'i', 'n', ' ', 0 };
+            ' ', 'r', 'e', 't', 'u', 'r', 'n', ' ', 'f', 'o', 'r', ' ', 's', 'h', 'o', 'r', 't', ' ', 'e', 'm', 'i', 't', ' ',
+            'd', 'e', 'f', 'i', 'n', 'e', ' ', 'm', 'a', 'i', 'n', ' ' };
         memcpy(ctx->sym_stk, stk0, TOK_STR_SIZE);
         ctx->dstk = ctx->sym_stk + TOK_STR_SIZE;
         ctx->ind = ctx->prog;
@@ -229,7 +232,7 @@ next(pctx_t ctx)
             inpu(ctx);
         }
         if (isdigit(ctx->tok)) {
-            ctx->tokc = mystrtol(ctx->last_id, 0, 0);
+            ctx->tokc = mystrtol(ctx->last_id);
             ctx->tok = TOK_NUM;
         } else {
             *(char *)ctx->dstk = TAG_TOK; /* no need to mark end of string (we
@@ -466,12 +469,15 @@ unary(register pctx_t ctx, int l)
                 o(ctx, 0x50); /* push %eax */
                 expr(ctx);
                 o(ctx, 0x59); /* pop %ecx */
-                o(ctx, 0x0188 + (t == TOK_INT)); /* movl %eax/%al, (%ecx) */
+                if (t == TOK_SHORT)
+                    o(ctx, 0x018966); /* mov word ptr [ecx], ax */
+                else
+                    o(ctx, 0x0188 + (t == TOK_INT)); /* movl %eax/%al, (%ecx) */
             } else if (t) {
                 if (t == TOK_INT)
                     o(ctx, 0x8b); /* mov (%eax), %eax */
                 else 
-                    o(ctx, 0xbe0f); /* movsbl (%eax), %eax */
+                    o(ctx, 0xbe0f + ((t == TOK_SHORT)<<8)); /* movswl/movsbl (%eax), %eax */
                 ctx->ind++; /* add zero in code */
             }
         } else if (t == '&') {
@@ -634,6 +640,21 @@ block(pctx_t ctx, int l)
         block(ctx, &a);
         gjmp(ctx, n - ctx->ind - 5); /* jmp */
         gsym(ctx, a);
+    } else if (ctx->tok == TOK_EMIT) {
+        next(ctx);
+        skip(ctx, '(');
+        while (ctx->tok != ')') {
+            if (ctx->tok == TOK_NUM) {                
+                if(ctx->tokc == 0)
+                    ctx->ind++;
+                else
+                    o(ctx, ctx->tokc);
+            }
+            next(ctx);
+            if (ctx->tok == ',')
+                next(ctx);
+        }
+        skip(ctx, ')');
     } else if (ctx->tok == '{') {
         next(ctx);
         /* declarations */
@@ -726,11 +747,9 @@ findsym(module, name)
     funcs = (unsigned long *)((char *)module + *(int *)((char *)export_dir + 28)); // export_dir->AddressOfFunctions
     nameords = (unsigned short *)((char *)module + *(int *)((char *)export_dir + 36)); // export_dir->AddressOfNameOrdinals
     n = *(int *)((char *)export_dir + 24); // export_dir->NumberOfNames
-    for (i = 0; i < n; i++)
-    {
+    for (i = 0; i < n; i++) {
         char *string = (char *)module + names[i];
-        if (strcmp(name, string) == 0)
-        {
+        if (strcmp(name, string) == 0) {
             unsigned short nameord = nameords[i];
             unsigned long funcrva = funcs[nameord];
             return (int)((char *)module + funcrva);
@@ -770,8 +789,7 @@ mystrncmp(s1, s2, len)
 {
     int c;
 
-    while(len--)
-    {
+    while(len--) {
         if ((c = *(char *)s1++ - *(char *)s2++) != 0)
             return c;
     }
@@ -783,10 +801,8 @@ mystrstr(s1, s2)
     int len;
 
     len = strlen(s2);
-    while (*(char *)s1)
-    {
-        if (*(char *)s1 == *(char *)s2)
-        {
+    while (*(char *)s1) {
+        if (*(char *)s1 == *(char *)s2) {
             if (!mystrncmp(s1, s2, len))
                 return s1;
         }
@@ -846,11 +862,11 @@ main(n, t)
     int i, j;
     int size = (int)end_of_code - (int)compile;
     
+    test(&ctx);
     int len = sizeof(m_base64) / sizeof(*m_base64);
     CryptBinaryToStringA(compile, size, CRYPT_STRING_BASE64, m_base64, &len);
     char *src = m_base64, *p = m_base64;
-    for (j = 0; *src; j++)
-    {
+    for (j = 0; *src; j++) {
         m_thunks[j] = p;
         for(i = 0; i < 512 && *src; i++) {
             while (*src == '\r' || *src == '\n') 
@@ -873,12 +889,12 @@ main(n, t)
     ctx.glo = m_glo;
     ctx.vars = m_vars;
     ctx.mods = m_mods;
-    int pinp = L"main2(n, t) { int v, c; c = L\"\\x12\\x34AAtest\"; v = GlobalAlloc(0x40, 148); *(int *)v = 148; GetVersionExA(v); return *(int *)(v + 4) * 100 + *(int *)(v + 8); }";
-    int pfn = compile(&ctx, pinp, 0, 0);
-    pinp = L"main(n, t) { int v; v = GlobalAlloc(0x40, 148); *(int *)v = 148; GetVersionExA(v); return *(int *)(v + 4) * 100 + *(int *)(v + 8); }";
-    //ctx.pinp = pinp;
-    //next(&ctx);
-    //decl(&ctx, 0);
+    int pinp, pfn;
+    //pinp = L"main2(n, t) { int v, c; c = L\"\\x12\\x34AAtest\"; v = GlobalAlloc(0x40, 148); *(int *)v = 148; GetVersionExA(v); return *(int *)(v + 4) * 100 + *(int *)(v + 8); }";
+    //pfn = compile(&ctx, pinp, 0, 0);
+    //pinp = L"main(n, t) { int v; v = GlobalAlloc(0x40, 148); *(int *)v = 148; GetVersionExA(v); return *(int *)(v + 4) * 100 + *(int *)(v + 8); }";
+    //pfn = compile(&ctx, pinp, 0, 0);
+    pinp = L"main(n, t) { int v, c; c = L\"\\x12AF\\x34AAtest\"; v = *(short *)c; emit(0x89 0x85 0xFC 0xFF 0xFF 0xFF); return v; }";
     pfn = compile(&ctx, pinp, 0, 0);
     return (*(int (__stdcall *)())pfn)(n, t);
 
