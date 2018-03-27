@@ -695,11 +695,20 @@ decl(pctx_t ctx, int l)
                 if (l) {
                     ctx->loc = ctx->loc + 4;
                     *(int *)ctx->tok = -ctx->loc;
+                    next(ctx);
                 } else {
                     *(int *)ctx->tok = ctx->glo;
-                    ctx->glo = ctx->glo + 4;
+                    next(ctx);
+                    if (ctx->tok == '[') {
+                        next(ctx);
+                        ctx->glo = ctx->glo + ctx->tokc;
+                        skip(ctx, ']');
+                        next(ctx);
+                    }
+                    else {
+                        ctx->glo = ctx->glo + 4;
+                    }
                 }
-                next(ctx);
                 if (ctx->tok == ',')
                     next(ctx);
             }
@@ -898,7 +907,7 @@ main(n, t)
     //pfn = compile(&ctx, pinp, 0, 0);
     //pinp = L"main(n, t) { int v; v = GlobalAlloc(0x40, 148); *(int *)v = 148; GetVersionExA(v); return *(int *)(v + 4) * 100 + *(int *)(v + 8); }";
     //pfn = compile(&ctx, pinp, 0, 0);
-    pinp = L"main(n, t) { int v, c; v = alloca(550); emit 0x90 0x90; *(int *)v = 55; c = L\"\\x12AF\\x34AAtest\"; eax = *(short *)c; if((eax & 2) != 2) eax = eax + eax; return eax; }";
+    pinp = L"int a, b[100]; main(n, t) { int v, c; v = alloca(550); emit 0x90 0x90; *(int *)v = 55; c = L\"\\x12AF\\x34AAtest\"; eax = *(short *)c; if((eax & 2) != 2) eax = eax + eax; return eax; }";
     pfn = compile(&ctx, pinp, 0, 0);
     return (*(int (__stdcall *)())pfn)(n, t);
 
