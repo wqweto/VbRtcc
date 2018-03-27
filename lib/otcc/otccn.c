@@ -66,7 +66,7 @@ typedef struct ctx_t {
 #define ALLOC_SIZE 99999
 
 /* depends on the init string */
-#define TOK_STR_SIZE 59
+#define TOK_STR_SIZE 63
 #define TOK_IDENT    0x100
 #define TOK_INT      0x100
 #define TOK_IF       0x120
@@ -77,8 +77,9 @@ typedef struct ctx_t {
 #define TOK_FOR      0x1f8
 #define TOK_SHORT    0x218
 #define TOK_EMIT     0x248
-#define TOK_DEFINE   0x270
-#define TOK_MAIN     0x2a8
+#define TOK_EAX      0x270
+#define TOK_DEFINE   0x290
+#define TOK_MAIN     0x2c8
 
 #define TOK_DUMMY   1
 #define TOK_NUM     2
@@ -92,7 +93,7 @@ typedef struct ctx_t {
 #define TAG_TOK    ' '
 #define TAG_MACRO  2
 
-#define CONST_T0_SIZE 127
+#define CONST_T0_SIZE 126
 
 
 compile(pctx_t ctx, int pinp, int wParam, int lParam)
@@ -103,18 +104,17 @@ compile(pctx_t ctx, int pinp, int wParam, int lParam)
         char t0[] = { '+', '+', '#', 'm', '-', '-', '%', 'a', 'm', '*', '@', 'R', '<', '^', '1', 'c', '/', '@', '%', '[', '_', '[', 'H', '3', 
             'c', '%', '@', '%', '[', '_', '[', 'H', '3', 'c', '+', '@', '.', 'B', '#', 'd', '-', '@', '%', ':', '_', '^', 'B', 'K', 'd', '<', 
             '<', 'Z', '/', '0', '3', 'e', '>', '>', '`', '/', '0', '3', 'e', '<', '=', '0', 'f', '>', '=', '/', 'f', '<', '@', '.', 'f', '>', 
-            '@', '1', 'f', '=', '=', '&', 'g', '!', '=', '\\', '\'', 'g', '&', '&', 'k', '|', '|', '#', 'l', '&', '@', '.', 'B', 'C', 'h', '^', 
+            '@', '1', 'f', '=', '=', '&', 'g', '!', '=', '\'', 'g', '&', '&', 'k', '|', '|', '#', 'l', '&', '@', '.', 'B', 'C', 'h', '^', 
             '@', '.', 'B', 'S', 'i', '|', '@', '.', 'B', '+', 'j', '~', '@', '/', '%', 'Y', 'd', '!', '@', '&', 'd', '*', '@', 'b', 0 };
         ctx->t0 = ctx->glo;
         memcpy(ctx->t0, t0, CONST_T0_SIZE);
         ctx->glo = ctx->t0 + CONST_T0_SIZE;
         char stk0[] = { ' ', 'i', 'n', 't', ' ', 'i', 'f', ' ', 'e', 'l', 's', 'e', ' ', 'w', 'h', 'i', 'l', 'e', ' ', 'b', 'r', 'e', 'a', 'k', 
-            ' ', 'r', 'e', 't', 'u', 'r', 'n', ' ', 'f', 'o', 'r', ' ', 's', 'h', 'o', 'r', 't', ' ', 'e', 'm', 'i', 't', ' ',
+            ' ', 'r', 'e', 't', 'u', 'r', 'n', ' ', 'f', 'o', 'r', ' ', 's', 'h', 'o', 'r', 't', ' ', 'e', 'm', 'i', 't', ' ', 'e', 'a', 'x', ' ',
             'd', 'e', 'f', 'i', 'n', 'e', ' ', 'm', 'a', 'i', 'n', ' ' };
         memcpy(ctx->sym_stk, stk0, TOK_STR_SIZE);
         ctx->dstk = ctx->sym_stk + TOK_STR_SIZE;
         ctx->ind = ctx->prog;
-        //ctx->tok = ctx->tokc = ctx->tokl = ctx->ch = ctx->rsym = ctx->loc = ctx->dptr = ctx->dch = ctx->last_id = 0;
     }
     ctx->pinp0 = ctx->pinp = pinp;
     r = ctx->ind;
@@ -484,20 +484,29 @@ unary(register pctx_t ctx, int l)
             gmov(ctx, 10, *(int *)ctx->tok); /* leal EA, %eax */
             next(ctx);
         } else {
-            n = *(int *)t;
-            /* forward reference: try dlsym */
-            if (!n)
-                n = dlsym(ctx, 0, ctx->last_id);
+            if (t == TOK_EAX) {
+                n = 0;
+            } else {
+                n = *(int *)t;
+                /* forward reference: try dlsym */
+                if (!n)
+                    n = dlsym(ctx, 0, ctx->last_id);
+            }
             if (ctx->tok == '=' & l) {
                 /* assignment */
                 next(ctx);
                 expr(ctx);
-                gmov(ctx, 6, n); /* mov %eax, EA */
+                if (n)
+                    gmov(ctx, 6, n); /* mov %eax, EA */
             } else if (ctx->tok != '(') {
-                /* variable */
-                gmov(ctx, 8, n); /* mov EA, %eax */
-                if (ctx->tokl == 11) {
-                    gmov(ctx, 0, n);
+                if (n)  /* variable */
+                    gmov(ctx, 8, n); /* mov EA, %eax */
+                if (ctx->tokl == 11) {      // `++` -> ctx->tokc=1, `--` -> ctx->tokc=0xFF
+                    if (n) {
+                        gmov(ctx, 0, n);    // add {ctx->tokc}, EA
+                    } else {
+                        o(ctx, 0xc083);     // add {ctx->tokc}, %eax
+                    }
                     o(ctx, ctx->tokc);
                     next(ctx);
                 }
@@ -862,7 +871,6 @@ main(n, t)
     int i, j;
     int size = (int)end_of_code - (int)compile;
     
-    test(&ctx);
     int len = sizeof(m_base64) / sizeof(*m_base64);
     CryptBinaryToStringA(compile, size, CRYPT_STRING_BASE64, m_base64, &len);
     char *src = m_base64, *p = m_base64;
@@ -894,7 +902,7 @@ main(n, t)
     //pfn = compile(&ctx, pinp, 0, 0);
     //pinp = L"main(n, t) { int v; v = GlobalAlloc(0x40, 148); *(int *)v = 148; GetVersionExA(v); return *(int *)(v + 4) * 100 + *(int *)(v + 8); }";
     //pfn = compile(&ctx, pinp, 0, 0);
-    pinp = L"main(n, t) { int v, c; c = L\"\\x12AF\\x34AAtest\"; v = *(short *)c; emit(0x89 0x85 0xFC 0xFF 0xFF 0xFF); return v; }";
+    pinp = L"main(n, t) { int v, c; c = L\"\\x12AF\\x34AAtest\"; eax = *(short *)c; if((eax & 2) != 2) eax = eax + eax; return eax; }";
     pfn = compile(&ctx, pinp, 0, 0);
     return (*(int (__stdcall *)())pfn)(n, t);
 
