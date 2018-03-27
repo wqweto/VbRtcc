@@ -12,6 +12,8 @@
 *.exe
 *.pdb
 ~*
+*.db
+*.opendb
 
 _del/
 [Rr]elease/
