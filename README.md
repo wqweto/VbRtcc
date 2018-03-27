@@ -1,5 +1,5 @@
 ## VbRtcc
-Runtime Tiny C Compilier for VB6
+Runtime Tiny C Compiler for VB6
 
 ### Description
 
