@@ -120,7 +120,7 @@
       <Optimization>MaxSpeed</Optimization>
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>false</IntrinsicFunctions>
-      <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>TINY;WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <CompileAs>CompileAsC</CompileAs>
       <AdditionalOptions>/Oi- /arch:IA32 %(AdditionalOptions)</AdditionalOptions>
       <CallingConvention>Cdecl</CallingConvention>
