@@ -1,5 +1,3 @@
-#define TINY
-//#define TEST
 /*
   Obfuscated Tiny C Compiler
 
@@ -79,8 +77,8 @@ typedef struct ctx_t {
 #define TOK_EMIT     0x248
 #define TOK_EAX      0x270
 #define TOK_ALLOCA   0x290
-#define TOK_DEFINE   0x2c0
-#define TOK_MAIN     0x300
+#define TOK_DEFINE   0x2c8
+#define TOK_MAIN     0x308
 
 #define TOK_DUMMY   1
 #define TOK_NUM     2
@@ -328,6 +326,7 @@ void error(char *fmt,...)
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);
     fprintf(stderr, "\n");
+    getchar();
     exit(1);
     va_end(ap);
 }
@@ -335,7 +334,8 @@ void error(char *fmt,...)
 void skip(pctx_t ctx, int c)
 {
     if (ctx->tok != c) {
-        error("%d: '%c' expected (found '%c')", (ctx->pinp - ctx->pinp0) / 2, c, ctx->tok);
+        error("'%c' expected (found '%c') at position %d\n%.40ws", c, ctx->tok, 
+            (ctx->pinp - ctx->pinp0 - 4) / 2, ctx->pinp - 4);
     }
     next(ctx);
 }
@@ -702,8 +702,8 @@ decl(pctx_t ctx, int l)
                     if (ctx->tok == '[') {
                         next(ctx);
                         ctx->glo = ctx->glo + ctx->tokc;
-                        skip(ctx, ']');
                         next(ctx);
+                        skip(ctx, ']');
                     }
                     else {
                         ctx->glo = ctx->glo + 4;
