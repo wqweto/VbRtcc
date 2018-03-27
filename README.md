@@ -3,7 +3,7 @@ Runtime Tiny C Compiler for VB6
 
 ### Description
 
-VbRtcc is a fork of OTCC by Fabrice Bellard with additional tweaks (relocatable code, stdcall calling convention, short pointers, emit keyword).
+VbRtcc is a fork of OTCC by Fabrice Bellard with additional tweaks -- relocatable code, stdcall calling convention, `short *` access, `emit` keyword, `eax` pseudo-register, `alloca` for local arrays.
 
 ### Sample usage
 
@@ -51,6 +51,8 @@ Returned `pfn` are usable until `m_ctx` is not destroyed with `RtccFree`.
  - Not supported operators: `+=` (and family) `?:` (ternary)
  - Block comments only (no `//` line comments)
  - `#define` supports constants only (no macro expansion)
+ - Register variable `eax` can be used in expressions (incl. assignment)
+ - Function `alloca` can be used for stack allocation
 
 ### ToDo
 
