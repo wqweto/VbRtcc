@@ -15,7 +15,7 @@
 
   1. The origin of this software must not be misrepresented; you must not
      claim that you wrote the original software. If you use this software
-     in a product, an acknowledgment in the product and its documentation 
+     in a product, an acknowledgment in the product and its documentation
      *is* required.
   2. Altered source versions must be plainly marked as such, and must not be
      misrepresented as being the original software.
@@ -42,7 +42,7 @@ int __cdecl strlen(const char *s);
 #pragma intrinsic(memcpy, memset, strcmp, strlen)
 
 
-/* vars: value of variables 
+/* vars: value of variables
    loc : local variable index
    glo : global variable index
    ind : output code ptr
@@ -53,7 +53,7 @@ int __cdecl strlen(const char *s);
 */
 typedef struct ctx_t {
     // input params
-    int prog, sym_stk, mods; 
+    int prog, sym_stk, mods;
     // in/out params
     int glo, vars;
     // preserved state
@@ -66,7 +66,7 @@ typedef struct ctx_t {
 #define ALLOC_SIZE 99999
 
 /* depends on the init string */
-#define TOK_STR_SIZE 63
+#define TOK_STR_SIZE 70
 #define TOK_IDENT    0x100
 #define TOK_INT      0x100
 #define TOK_IF       0x120
@@ -78,8 +78,9 @@ typedef struct ctx_t {
 #define TOK_SHORT    0x218
 #define TOK_EMIT     0x248
 #define TOK_EAX      0x270
-#define TOK_DEFINE   0x290
-#define TOK_MAIN     0x2c8
+#define TOK_ALLOCA   0x290
+#define TOK_DEFINE   0x2c0
+#define TOK_MAIN     0x300
 
 #define TOK_DUMMY   1
 #define TOK_NUM     2
@@ -101,17 +102,17 @@ compile(pctx_t ctx, int pinp, int wParam, int lParam)
     int r;
 
     if (!ctx->ind) {
-        char t0[] = { '+', '+', '#', 'm', '-', '-', '%', 'a', 'm', '*', '@', 'R', '<', '^', '1', 'c', '/', '@', '%', '[', '_', '[', 'H', '3', 
-            'c', '%', '@', '%', '[', '_', '[', 'H', '3', 'c', '+', '@', '.', 'B', '#', 'd', '-', '@', '%', ':', '_', '^', 'B', 'K', 'd', '<', 
-            '<', 'Z', '/', '0', '3', 'e', '>', '>', '`', '/', '0', '3', 'e', '<', '=', '0', 'f', '>', '=', '/', 'f', '<', '@', '.', 'f', '>', 
-            '@', '1', 'f', '=', '=', '&', 'g', '!', '=', '\'', 'g', '&', '&', 'k', '|', '|', '#', 'l', '&', '@', '.', 'B', 'C', 'h', '^', 
+        char t0[] = { '+', '+', '#', 'm', '-', '-', '%', 'a', 'm', '*', '@', 'R', '<', '^', '1', 'c', '/', '@', '%', '[', '_', '[', 'H', '3',
+            'c', '%', '@', '%', '[', '_', '[', 'H', '3', 'c', '+', '@', '.', 'B', '#', 'd', '-', '@', '%', ':', '_', '^', 'B', 'K', 'd', '<',
+            '<', 'Z', '/', '0', '3', 'e', '>', '>', '`', '/', '0', '3', 'e', '<', '=', '0', 'f', '>', '=', '/', 'f', '<', '@', '.', 'f', '>',
+            '@', '1', 'f', '=', '=', '&', 'g', '!', '=', '\'', 'g', '&', '&', 'k', '|', '|', '#', 'l', '&', '@', '.', 'B', 'C', 'h', '^',
             '@', '.', 'B', 'S', 'i', '|', '@', '.', 'B', '+', 'j', '~', '@', '/', '%', 'Y', 'd', '!', '@', '&', 'd', '*', '@', 'b', 0 };
         ctx->t0 = ctx->glo;
         memcpy(ctx->t0, t0, CONST_T0_SIZE);
         ctx->glo = ctx->t0 + CONST_T0_SIZE;
-        char stk0[] = { ' ', 'i', 'n', 't', ' ', 'i', 'f', ' ', 'e', 'l', 's', 'e', ' ', 'w', 'h', 'i', 'l', 'e', ' ', 'b', 'r', 'e', 'a', 'k', 
-            ' ', 'r', 'e', 't', 'u', 'r', 'n', ' ', 'f', 'o', 'r', ' ', 's', 'h', 'o', 'r', 't', ' ', 'e', 'm', 'i', 't', ' ', 'e', 'a', 'x', ' ',
-            'd', 'e', 'f', 'i', 'n', 'e', ' ', 'm', 'a', 'i', 'n', ' ' };
+        char stk0[] = { ' ', 'i', 'n', 't', ' ', 'i', 'f', ' ', 'e', 'l', 's', 'e', ' ', 'w', 'h', 'i', 'l', 'e', ' ', 'b', 'r', 'e', 'a', 'k', ' ',
+            'r', 'e', 't', 'u', 'r', 'n', ' ', 'f', 'o', 'r', ' ', 's', 'h', 'o', 'r', 't', ' ', 'e', 'm', 'i', 't', ' ', 'e', 'a', 'x', ' ',
+            'a', 'l', 'l', 'o', 'c', 'a', ' ', 'd', 'e', 'f', 'i', 'n', 'e', ' ', 'm', 'a', 'i', 'n', ' ' };
         memcpy(ctx->sym_stk, stk0, TOK_STR_SIZE);
         ctx->dstk = ctx->sym_stk + TOK_STR_SIZE;
         ctx->ind = ctx->prog;
@@ -281,7 +282,7 @@ next(pctx_t ctx)
                     ctx->tokc = ctx->tokc * 64 + ctx->tokl + 64;
                 if (l == ctx->tok & (a == ctx->ch | a == '@')) {
 #if 0
-                    printf("%c%c -> tokl=%d tokc=0x%x\n", 
+                    printf("%c%c -> tokl=%d tokc=0x%x\n",
                            l, a, tokl, tokc);
 #endif
                     if (a == ctx->ch) {
@@ -300,7 +301,7 @@ next(pctx_t ctx)
         printf("tok=0x%x ", tok);
         if (tok >= TOK_IDENT) {
             printf("'");
-            if (tok > TOK_DEFINE) 
+            if (tok > TOK_DEFINE)
                 p = sym_stk + 1 + (tok - vars - TOK_IDENT) / 8;
             else
                 p = sym_stk + 1 + (tok - TOK_IDENT) / 8;
@@ -437,6 +438,10 @@ unary(register pctx_t ctx, int l)
         next(ctx);
         if (t == TOK_NUM) {
             li(ctx, a);
+        } else if (t == TOK_ALLOCA) {
+            expr(ctx);
+            o(ctx, 0xc429);                                         // sub %eax, %esp
+            o(ctx, 0xe089);                                         // mov %esp, %eax
         } else if (c == 2) {
             /* -, +, !, ~ */
             unary(ctx, 0);
@@ -470,14 +475,14 @@ unary(register pctx_t ctx, int l)
                 expr(ctx);
                 o(ctx, 0x59); /* pop %ecx */
                 if (t == TOK_SHORT)
-                    o(ctx, 0x018966); /* mov word ptr [ecx], ax */
+                    o(ctx, 0x018966);                           // movw %ax, (%ecx)
                 else
                     o(ctx, 0x0188 + (t == TOK_INT)); /* movl %eax/%al, (%ecx) */
             } else if (t) {
                 if (t == TOK_INT)
                     o(ctx, 0x8b); /* mov (%eax), %eax */
-                else 
-                    o(ctx, 0xbe0f + ((t == TOK_SHORT)<<8)); /* movswl/movsbl (%eax), %eax */
+                else
+                    o(ctx, 0xbe0f + ((t == TOK_SHORT)<<8));     // movswl/movsbl (%eax), %eax
                 ctx->ind++; /* add zero in code */
             }
         } else if (t == '&') {
@@ -501,11 +506,11 @@ unary(register pctx_t ctx, int l)
             } else if (ctx->tok != '(') {
                 if (n)  /* variable */
                     gmov(ctx, 8, n); /* mov EA, %eax */
-                if (ctx->tokl == 11) {      // `++` -> ctx->tokc=1, `--` -> ctx->tokc=0xFF
+                if (ctx->tokl == 11) {                          // `++` -> ctx->tokc=1, `--` -> ctx->tokc=0xFF
                     if (n) {
-                        gmov(ctx, 0, n);    // add {ctx->tokc}, EA
+                        gmov(ctx, 0, n);                        // add $ctx->tokc, EA
                     } else {
-                        o(ctx, 0xc083);     // add {ctx->tokc}, %eax
+                        o(ctx, 0xc083);                         // add $ctx->tokc, %eax
                     }
                     o(ctx, ctx->tokc);
                     next(ctx);
@@ -538,13 +543,10 @@ unary(register pctx_t ctx, int l)
             *(int *)t = psym(ctx, 0xe8, *(int *)t);
         } else if (n == 1) {
             oad(ctx, 0x2494ff, l); /* call *xxx(%esp) */
-            //l = l + 4;
             oad(ctx, 0xc481, 4); /* add $xxx, %esp */
         } else {
             oad(ctx, 0xe8, n - ctx->ind - 5); /* call xxx */
         }
-        //if (l)
-        //    oad(0xc481, l); /* add $xxx, %esp */
     }
 }
 
@@ -569,7 +571,6 @@ sum(pctx_t ctx, int l)
                 o(ctx, 0x50); /* push %eax */
                 sum(ctx, l);
                 o(ctx, 0x59); /* pop %ecx */
-                
                 if (l == 4 | l == 5) {
                     gcmp(ctx, t);
                 } else {
@@ -651,19 +652,15 @@ block(pctx_t ctx, int l)
         gsym(ctx, a);
     } else if (ctx->tok == TOK_EMIT) {
         next(ctx);
-        skip(ctx, '(');
-        while (ctx->tok != ')') {
-            if (ctx->tok == TOK_NUM) {                
+        while (ctx->tok != ';') {
+            if (ctx->tok == TOK_NUM) {
                 if(ctx->tokc == 0)
                     ctx->ind++;
                 else
                     o(ctx, ctx->tokc);
             }
             next(ctx);
-            if (ctx->tok == ',')
-                next(ctx);
         }
-        skip(ctx, ')');
     } else if (ctx->tok == '{') {
         next(ctx);
         /* declarations */
@@ -703,7 +700,7 @@ decl(pctx_t ctx, int l)
                     ctx->glo = ctx->glo + 4;
                 }
                 next(ctx);
-                if (ctx->tok == ',') 
+                if (ctx->tok == ',')
                     next(ctx);
             }
             skip(ctx, ';');
@@ -730,9 +727,8 @@ decl(pctx_t ctx, int l)
             sa = oad(ctx, 0xec81, 0); /* sub $xxx, %esp */
             block(ctx, 0);
             gsym(ctx, ctx->rsym);
-            //o(0xc3c9); /* leave, ret */
-            o(ctx, 0xc9); /* leave */
-            oad(ctx, 0xc2, a - 8); /* ret $xxx */
+            o(ctx, 0xc9);                                       // leave
+            oad(ctx, 0xc2, a - 8);                              // ret $xx
             ctx->ind = ctx->ind - 2;
             *(int *)sa = ctx->loc; /* save local variables */
         }
@@ -782,16 +778,16 @@ dlsym(pctx_t ctx, int m, int n)
     return 0;
 }
 
-isalnum(c) { 
-    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'; 
+isalnum(c) {
+    return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9';
 }
 
-isspace(c) { 
-    return c == ' ' || c == '\t' || c == '\r' || c == '\n'; 
+isspace(c) {
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 }
 
-isdigit(c) { 
-    return c >= '0' && c <= '9'; 
+isdigit(c) {
+    return c >= '0' && c <= '9';
 }
 
 mystrncmp(s1, s2, len)
@@ -824,7 +820,7 @@ mystrtol(s)
 {
     int v;
     char c;
-    
+
     while (isspace(*(char *)s))
         s = s + 1;
     v = 0;
@@ -870,14 +866,14 @@ main(n, t)
     struct ctx_t ctx = { 0 };
     int i, j;
     int size = (int)end_of_code - (int)compile;
-    
+
     int len = sizeof(m_base64) / sizeof(*m_base64);
     CryptBinaryToStringA(compile, size, CRYPT_STRING_BASE64, m_base64, &len);
     char *src = m_base64, *p = m_base64;
     for (j = 0; *src; j++) {
         m_thunks[j] = p;
         for(i = 0; i < 512 && *src; i++) {
-            while (*src == '\r' || *src == '\n') 
+            while (*src == '\r' || *src == '\n')
                 src++;
             *p++ = *src++;
         }
@@ -902,12 +898,12 @@ main(n, t)
     //pfn = compile(&ctx, pinp, 0, 0);
     //pinp = L"main(n, t) { int v; v = GlobalAlloc(0x40, 148); *(int *)v = 148; GetVersionExA(v); return *(int *)(v + 4) * 100 + *(int *)(v + 8); }";
     //pfn = compile(&ctx, pinp, 0, 0);
-    pinp = L"main(n, t) { int v, c; c = L\"\\x12AF\\x34AAtest\"; eax = *(short *)c; if((eax & 2) != 2) eax = eax + eax; return eax; }";
+    pinp = L"main(n, t) { int v, c; v = alloca(550); emit 0x90 0x90; *(int *)v = 55; c = L\"\\x12AF\\x34AAtest\"; eax = *(short *)c; if((eax & 2) != 2) eax = eax + eax; return eax; }";
     pfn = compile(&ctx, pinp, 0, 0);
     return (*(int (__stdcall *)())pfn)(n, t);
 
 #ifdef TEST
-    { 
+    {
         FILE *f;
         f = fopen(*(char **)(t + 4), "w");
         fwrite((void *)prog, 1, ind - prog, f);
