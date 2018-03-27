@@ -43,7 +43,7 @@ Returned `pfn` are usable until `m_ctx` is not destroyed with `RtccFree`.
  - Shifts are signed e.g. `i = i >> 8` extends the sign bit.
  - Function retval/parameters are always `int` (no types allowed) e.g. `main(n, t)` returns `int` and has two `int` parameters.
  - Char literals are cast to dword e.g. `v = 'a'` is sign-extended
- - Char/strings escape allows hex values e.g. "\x12\x5f" and `\r`, `\n` and `\t`
+ - Char/strings escape allows hex values e.g. `"\x12\x5f"` and `\r`, `\n` and `\t`
  - Unicode char/strings allowed with `L"string"` and `L'a'` and hex word escapes with `L"\x1234\xabff"`
  - Keyword `emit` allows dword values e.g. `emit(0x12 0x34 0x5678)` with commas being optional
  - Supported statements: `if`/`else` `while` `for` `break` `return`
@@ -54,6 +54,6 @@ Returned `pfn` are usable until `m_ctx` is not destroyed with `RtccFree`.
 
 ### ToDo
 
- [x] Support `short` data type for Unicode strings
- [x] Support `emit`
- [ ] Impl get symbol address after compile
+  [x] Support `short` data type for Unicode strings
+  [x] Support `emit`
+  [ ] Impl get symbol address after compile
