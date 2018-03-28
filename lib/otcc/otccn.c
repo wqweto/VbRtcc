@@ -24,15 +24,17 @@
 #endif
 #include <stdio.h>
 
-//#pragma section(".code",execute,read)
-//#pragma comment(linker,"/MERGE:.text=.code")
-//#pragma comment(linker,"/MERGE:.data=.code")
-//#pragma comment(linker,"/SECTION:.code,ERW")
-//#pragma code_seg(".code")
-#pragma comment(lib, "kernel32.lib")
-#pragma comment(lib, "psapi.lib")
-#pragma comment(lib, "crypt32")
+#ifdef _DEBUG
+void error(char *fmt,...);
+#define assert(expr) { if (!(expr)) error("assert failed: %s", #expr); }
+//#define tok_error(tok, tokn, str) error("%s defined 0x%x (should be 0x%x)", tokn, tok, c);
+#define tok_assert(tok, str) { int c = (mystrstr(ctx->sym_stk, (str)) - ctx->sym_stk) * 8 + TOK_IDENT; if((tok) != c) error("%s defined 0x%x (should be 0x%x)", #tok, (tok), c);  }
+#else
+#define assert(expr)
+#define tok_assert(tok, str)
+#endif
 
+void __cdecl exit(int);
 void * __cdecl memcpy(void *d, const void *s, int n);
 void * __cdecl memset(void *p, int v, int n);
 int __cdecl strcmp(const char *s1, const char *s2);
@@ -64,7 +66,7 @@ typedef struct ctx_t {
 #define ALLOC_SIZE 99999
 
 /* depends on the init string */
-#define TOK_STR_SIZE 70
+#define TOK_STR_SIZE 83
 #define TOK_IDENT    0x100
 #define TOK_INT      0x100
 #define TOK_IF       0x120
@@ -74,11 +76,16 @@ typedef struct ctx_t {
 #define TOK_RETURN   0x1c0
 #define TOK_FOR      0x1f8
 #define TOK_SHORT    0x218
-#define TOK_EMIT     0x248
-#define TOK_EAX      0x270
-#define TOK_ALLOCA   0x290
-#define TOK_DEFINE   0x2c8
-#define TOK_MAIN     0x308
+#define TOK_ALLOCA   0x248
+#define TOK_ASM      0x280
+#define TOK_ASM_EMIT 0x2b0
+#define TOK_ASM_MOV  0x2e8
+#define TOK_ASM_EAX  0x310
+#define TOK_DEFINE   0x330
+#define TOK_MAIN     0x368
+#define IDX_ASM_EMIT 54
+#define IDX_ASM_MOV  61
+#define IDX_ASM_EAX  66
 
 #define TOK_DUMMY   1
 #define TOK_NUM     2
@@ -109,9 +116,29 @@ compile(pctx_t ctx, int pinp, int wParam, int lParam)
         memcpy(ctx->t0, t0, CONST_T0_SIZE);
         ctx->glo = ctx->t0 + CONST_T0_SIZE;
         char stk0[] = { ' ', 'i', 'n', 't', ' ', 'i', 'f', ' ', 'e', 'l', 's', 'e', ' ', 'w', 'h', 'i', 'l', 'e', ' ', 'b', 'r', 'e', 'a', 'k', ' ',
-            'r', 'e', 't', 'u', 'r', 'n', ' ', 'f', 'o', 'r', ' ', 's', 'h', 'o', 'r', 't', ' ', 'e', 'm', 'i', 't', ' ', 'e', 'a', 'x', ' ',
-            'a', 'l', 'l', 'o', 'c', 'a', ' ', 'd', 'e', 'f', 'i', 'n', 'e', ' ', 'm', 'a', 'i', 'n', ' ' };
+            'r', 'e', 't', 'u', 'r', 'n', ' ', 'f', 'o', 'r', ' ', 's', 'h', 'o', 'r', 't', ' ', 'a', 'l', 'l', 'o', 'c', 'a', ' ', 
+            '_', 'a', 's', 'm', ' ', '!', '_', 'e', 'm', 'i', 't', ' ', '!', 'm', 'o', 'v', ' ', '!', 'e', 'a', 'x', ' ',
+            'd', 'e', 'f', 'i', 'n', 'e', ' ', 'm', 'a', 'i', 'n', ' ' };
+        assert(TOK_STR_SIZE == sizeof(stk0));
         memcpy(ctx->sym_stk, stk0, TOK_STR_SIZE);
+        tok_assert(TOK_INT, " int ");
+        tok_assert(TOK_IF, " if ");
+        tok_assert(TOK_ELSE, " else ");
+        tok_assert(TOK_WHILE, " while ");
+        tok_assert(TOK_BREAK, " break ");
+        tok_assert(TOK_RETURN, " return ");
+        tok_assert(TOK_FOR, " for ");
+        tok_assert(TOK_SHORT, " short ");
+        tok_assert(TOK_ASM, " _asm ");
+        tok_assert(TOK_ASM_EMIT, "!_emit ");
+        tok_assert(TOK_ASM_MOV, "!mov ");
+        tok_assert(TOK_ASM_EAX, "!eax ");
+        tok_assert(TOK_ALLOCA, " alloca ");
+        tok_assert(TOK_DEFINE, " define ");
+        tok_assert(TOK_MAIN, " main ");
+        assert(*(char *)(ctx->sym_stk + IDX_ASM_EMIT) == '!');
+        assert(*(char *)(ctx->sym_stk + IDX_ASM_MOV) == '!');
+        assert(*(char *)(ctx->sym_stk + IDX_ASM_EAX) == '!');
         ctx->dstk = ctx->sym_stk + TOK_STR_SIZE;
         ctx->ind = ctx->prog;
     }
@@ -155,7 +182,7 @@ peek(pctx_t ctx)
 
 isid(ch)
 {
-    return isalnum(ch) | ch == '_';
+    return myisalnum(ch) | ch == '_';
 }
 
 /* read a character constant */
@@ -197,7 +224,7 @@ next(pctx_t ctx)
 {
     int t, l, a;
 
-    while (isspace(ctx->ch) | ctx->ch == '#') {
+    while (myisspace(ctx->ch) | ctx->ch == '#') {
         if (ctx->ch == '#') {
             inpu(ctx);
             next(ctx);
@@ -230,7 +257,7 @@ next(pctx_t ctx)
             pdef(ctx, ctx->ch);
             inpu(ctx);
         }
-        if (isdigit(ctx->tok)) {
+        if (myisdigit(ctx->tok)) {
             ctx->tokc = mystrtol(ctx->last_id);
             ctx->tok = TOK_NUM;
         } else {
@@ -440,6 +467,8 @@ unary(register pctx_t ctx, int l)
             li(ctx, a);
         } else if (t == TOK_ALLOCA) {
             expr(ctx);
+            o(ctx, 0x03c083);                                       // add 3, %eax
+            o(ctx, 0xfce083);                                       // and -4, %eax
             o(ctx, 0xc429);                                         // sub %eax, %esp
             o(ctx, 0xe089);                                         // mov %esp, %eax
         } else if (c == 2) {
@@ -489,7 +518,7 @@ unary(register pctx_t ctx, int l)
             gmov(ctx, 10, *(int *)ctx->tok); /* leal EA, %eax */
             next(ctx);
         } else {
-            if (t == TOK_EAX) {
+            if (t == TOK_ASM_EAX) {
                 n = 0;
             } else {
                 n = *(int *)t;
@@ -650,17 +679,35 @@ block(pctx_t ctx, int l)
         block(ctx, &a);
         gjmp(ctx, n - ctx->ind - 5); /* jmp */
         gsym(ctx, a);
-    } else if (ctx->tok == TOK_EMIT) {
-        next(ctx);
-        while (ctx->tok != ';') {
-            if (ctx->tok == TOK_NUM) {
-                if(ctx->tokc == 0)
-                    ctx->ind++;
-                else
-                    o(ctx, ctx->tokc);
-            }
+    } else if (ctx->tok == TOK_ASM) {
+        *(char *)(ctx->sym_stk + IDX_ASM_EMIT) = ' ';
+        *(char *)(ctx->sym_stk + IDX_ASM_MOV) = ' ';
+        *(char *)(ctx->sym_stk + IDX_ASM_EAX) = ' ';
+        while (ctx->tok == TOK_ASM) {
             next(ctx);
+            if (ctx->tok == TOK_ASM_EMIT) {
+                next(ctx);
+                if (ctx->tok == '(')
+                    next(ctx);
+                if (ctx->tok == TOK_NUM) {
+                    if(ctx->tokc == 0)
+                        ctx->ind++;
+                    else
+                        o(ctx, ctx->tokc);
+                    next(ctx);
+                }
+                if (ctx->tok == ')')
+                    next(ctx);
+            } else if (ctx->tok == TOK_ASM_MOV) {
+                next(ctx);
+                skip(ctx, TOK_ASM_EAX);
+                skip(ctx, ',');
+                expr(ctx);
+            }
         }
+        *(char *)(ctx->sym_stk + IDX_ASM_EMIT) = '!';
+        *(char *)(ctx->sym_stk + IDX_ASM_MOV) = '!';
+        *(char *)(ctx->sym_stk + IDX_ASM_EAX) = '!';
     } else if (ctx->tok == '{') {
         next(ctx);
         /* declarations */
@@ -701,7 +748,7 @@ decl(pctx_t ctx, int l)
                     next(ctx);
                     if (ctx->tok == '[') {
                         next(ctx);
-                        ctx->glo = ctx->glo + ctx->tokc;
+                        ctx->glo = ctx->glo + ctx->tokc + 3 & -4; /* align heap */
                         next(ctx);
                         skip(ctx, ']');
                     }
@@ -787,15 +834,15 @@ dlsym(pctx_t ctx, int m, int n)
     return 0;
 }
 
-isalnum(c) {
+myisalnum(c) {
     return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9';
 }
 
-isspace(c) {
+myisspace(c) {
     return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 }
 
-isdigit(c) {
+myisdigit(c) {
     return c >= '0' && c <= '9';
 }
 
@@ -830,7 +877,7 @@ mystrtol(s)
     int v;
     char c;
 
-    while (isspace(*(char *)s))
+    while (myisspace(*(char *)s))
         s = s + 1;
     v = 0;
     if (*(char *)s == '0' && *(char *)(s + 1) == 'x') {
@@ -849,36 +896,22 @@ mystrtol(s)
     return v;
 }
 
-void __declspec(naked) end_of_code(void) {}
+__declspec(naked) void end_of_code(void) {}
 
-//#define WIN32_LEAN_AND_MEAN
-//#include <windows.h>
-int __stdcall GetModuleHandleA(char *);
-int __stdcall VirtualAlloc(int, int, int, int);
-int __stdcall GetCurrentProcess(void);
-int __stdcall EnumProcessModules(int, int *, int, int);
-int __stdcall LoadLibraryA(char *);
-int __stdcall CryptBinaryToStringA (int, int, int, int, int);
-#define MEM_COMMIT 0x1000
-#define PAGE_EXECUTE_READWRITE 0x40
+#pragma comment(lib, "crypt32")
+__declspec(dllimport) int __stdcall CryptBinaryToStringA (int, int, int, int, int);
 #define CRYPT_STRING_BASE64 1
-
-char m_sym_stk[ALLOC_SIZE] = { 0 };
-char m_glo[ALLOC_SIZE] = { 0 };
-char m_vars[ALLOC_SIZE] = { 0 };
-char m_mods[1000] = { 0 };
-char m_base64[20000] = { 0 };
-char *m_thunks[100];
 
 main(n, t)
 {
-    struct ctx_t ctx = { 0 };
     int i, j;
     int size = (int)end_of_code - (int)compile;
+    char m_buffer[20000] = { 0 };
+    char *m_thunks[100];
 
-    int len = sizeof(m_base64) / sizeof(*m_base64);
-    CryptBinaryToStringA(compile, size, CRYPT_STRING_BASE64, m_base64, &len);
-    char *src = m_base64, *p = m_base64;
+    int buflen = sizeof(m_buffer) / sizeof(*m_buffer);
+    CryptBinaryToStringA(compile, size, CRYPT_STRING_BASE64, m_buffer, &buflen);
+    char *src = m_buffer, *p = m_buffer;
     for (j = 0; *src; j++) {
         m_thunks[j] = p;
         for(i = 0; i < 512 && *src; i++) {
@@ -896,30 +929,11 @@ main(n, t)
         printf("    \"%s\"%s\n", m_thunks[i], i % 10 < 9 && i < j-1 ? " & _" : "");
     }
 
-    EnumProcessModules(GetCurrentProcess(), m_mods, 1000, 0);
-    ctx.prog = VirtualAlloc(0, ALLOC_SIZE, MEM_COMMIT, PAGE_EXECUTE_READWRITE);
-    ctx.sym_stk = m_sym_stk;
-    ctx.glo = m_glo;
-    ctx.vars = m_vars;
-    ctx.mods = m_mods;
-    int pinp, pfn;
-    //pinp = L"main2(n, t) { int v, c; c = L\"\\x12\\x34AAtest\"; v = GlobalAlloc(0x40, 148); *(int *)v = 148; GetVersionExA(v); return *(int *)(v + 4) * 100 + *(int *)(v + 8); }";
-    //pfn = compile(&ctx, pinp, 0, 0);
-    //pinp = L"main(n, t) { int v; v = GlobalAlloc(0x40, 148); *(int *)v = 148; GetVersionExA(v); return *(int *)(v + 4) * 100 + *(int *)(v + 8); }";
-    //pfn = compile(&ctx, pinp, 0, 0);
-    pinp = L"int a, b[100]; main(n, t) { int v, c; v = alloca(550); emit 0x90 0x90; *(int *)v = 55; c = L\"\\x12AF\\x34AAtest\"; eax = *(short *)c; if((eax & 2) != 2) eax = eax + eax; return eax; }";
-    pfn = compile(&ctx, pinp, 0, 0);
-    return (*(int (__stdcall *)())pfn)(n, t);
-
-#ifdef TEST
-    {
-        FILE *f;
-        f = fopen(*(char **)(t + 4), "w");
-        fwrite((void *)prog, 1, ind - prog, f);
-        fclose(f);
-        return 0;
-    }
-#else
-    //return (*(int (__stdcall *)())*(int *)(vars + TOK_MAIN)) (n, t);
+#ifdef _DEBUG
+    return test(n, t);
 #endif
 }
+
+#ifdef _DEBUG
+#include "test.c"
+#endif
