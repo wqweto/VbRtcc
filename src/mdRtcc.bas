@@ -62,7 +62,7 @@ Private Declare Function EnumProcessModules Lib "psapi" (ByVal hProcess As Long,
 ' Constants and member variables
 '=========================================================================
 
-Private Const ALLOC_SIZE                    As Long = 10000
+Private Const ALLOC_SIZE                    As Long = 2 ^ 16 - 32
 
 Private Type UcsRtccBufferType
     m_data(0 To ALLOC_SIZE) As Byte
