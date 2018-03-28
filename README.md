@@ -3,7 +3,7 @@ Runtime Tiny C Compiler for VB6
 
 ### Description
 
-VbRtcc is a fork of OTCC by Fabrice Bellard with additional tweaks -- relocatable code, stdcall calling convention, `short *` access, `emit` keyword, `eax` pseudo-register, local and global arrays.
+VbRtcc is a fork of OTCC by Fabrice Bellard with additional tweaks -- relocatable code, stdcall calling convention, `short *` access, `_asm` for inline assembly, local and global arrays.
 
 ### Sample usage
 
@@ -45,16 +45,16 @@ Returned `pfn` are usable until `m_ctx` is not destroyed with `RtccFree`.
  - Char literals are cast to dword e.g. `v = 'a'` is sign-extended
  - Char/strings escape allows hex values e.g. `"\x12\x5f"` and `\r`, `\n` and `\t`
  - Unicode char/strings allowed with `L"string"` and `L'a'` and hex word escapes with `L"\x1234\xabff"`
- - Keyword `emit` allows dword values e.g. `emit(0x12 0x34 0x5678)` with commas being optional
  - Supported statements: `if`/`else` `while` `for` `break` `return`
  - Supported operators: `+` `-` `*` `/` `%` `!` `~` `>>` `<<` `|` `&` `^` `++` `--` `&&` `||` `==` `!=` `<` `>` `<=` `>=`
  - Not supported operators: `+=` (and family) `?:` (ternary) `,` (comma in for loops too)
  - Block comments only (no `//` line comments)
  - `#define` supports constants only (no macro expansion)
- - Register variable `eax` can be used in expressions (incl. assignment)
  - Function `alloca` can be used for stack allocation of local arrays
- - Only global arrays declaration is supported w/ size in bytes e.g. `int a[100]` allocates 100 bytes in `ctx->glob`
-
+ - Only global arrays declaration is supported w/ size in bytes e.g. `int a[100]` reserves 100 bytes (from `ctx->glob`)
+ - `_asm _emit <num>` allows encoding custom instructions in codegen
+ - `_asm mov eax, <expr>` supported only, where `<expr>` can be const/var or complex expression
+ 
 ### ToDo
 
  - [x] Support `short` data type for Unicode strings
