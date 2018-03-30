@@ -1,5 +1,6 @@
 VERSION 5.00
 Begin VB.Form Form1 
+   AutoRedraw      =   -1  'True
    Caption         =   "Form1"
    ClientHeight    =   2592
    ClientLeft      =   108
@@ -76,9 +77,8 @@ Private Sub Command1_Click()
         "   return a*b;" & vbCrLf & _
         "}")
     Debug.Assert RtccGetSymbol(m_ctx, "mul") = pfn
-    
-    RtccPatchProto AddressOf ProtoMul
-    Print ProtoMul(pfn, 13, 20), "&H" & Hex(pfn)
+        
+    Print CallMul(pfn, 13, 20), "&H" & Hex(pfn)
 End Sub
 
 Private Sub Command2_Click()

@@ -12,7 +12,9 @@ Attribute VB_Name = "Module1"
 Option Explicit
 DefObj A-Z
 
-Public Function ProtoMul(ByVal pfn As Long, ByVal lFirst As Long, ByVal lSecond As Long) As Long
-    '--- will be patched to call `pfn` with args `lFirst` and `lSecond`
+Public Function CallMul(ByVal pfn As Long, ByVal lFirst As Long, ByVal lSecond As Long) As Long
+    '--- on first call will self-patch to call `pfn` with args `lFirst` and `lSecond` directly
+    RtccPatchProto AddressOf Module1.CallMul
+    CallMul = CallMul(pfn, lFirst, lSecond)
 End Function
 
