@@ -625,7 +625,6 @@ expr(pctx_t ctx)
     sum(ctx, 11);
 }
 
-
 test_expr(pctx_t ctx)
 {
     expr(ctx);
@@ -791,29 +790,27 @@ decl(pctx_t ctx, int l)
     }
 }
 
-
 findsym(module, name)
 {
-    char *nt_headers;
-    char *export_dir;
-    unsigned long *names, *funcs;
-    unsigned short *nameords;
     int i, n;
+    int nt_headers, export_dir;
+    int names, funcs, nameords;
+    int string, nameord, funcrva;
 
-    nt_headers = (char *)module + *(int *)((char *)module + 60);
-    export_dir = (char *)module + *(int *)(nt_headers + 120);
-    if (*(int *)((char *)export_dir + 32) == 0)
+    nt_headers = module + *(int *)(module + 60);
+    export_dir = module + *(int *)(nt_headers + 120);
+    if (*(int *)(export_dir + 32) == 0)
         return 0;
-    names = (unsigned long *)((char *)module + *(int *)((char *)export_dir + 32)); // export_dir->AddressOfNames
-    funcs = (unsigned long *)((char *)module + *(int *)((char *)export_dir + 28)); // export_dir->AddressOfFunctions
-    nameords = (unsigned short *)((char *)module + *(int *)((char *)export_dir + 36)); // export_dir->AddressOfNameOrdinals
-    n = *(int *)((char *)export_dir + 24); // export_dir->NumberOfNames
+    names = module + *(int *)(export_dir + 32);                 // export_dir->AddressOfNames
+    funcs = module + *(int *)(export_dir + 28);                 // export_dir->AddressOfFunctions
+    nameords = module + *(int *)(export_dir + 36);              // export_dir->AddressOfNameOrdinals
+    n = *(int *)(export_dir + 24);                              // export_dir->NumberOfNames
     for (i = 0; i < n; i++) {
-        char *string = (char *)module + names[i];
-        if (strcmp(name, string) == 0) {
-            unsigned short nameord = nameords[i];
-            unsigned long funcrva = funcs[nameord];
-            return (int)((char *)module + funcrva);
+        string = module + *(int *)(names + i*4);
+        if (!strcmp(name, string)) {
+            nameord = *(short *)(nameords + i*2);
+            funcrva = *(int *)(funcs + nameord*4);
+            return module + funcrva;
         }
     }
     return 0;
@@ -851,8 +848,9 @@ mystrncmp(s1, s2, len)
     int c;
 
     while(len--) {
-        if ((c = *(char *)s1++ - *(char *)s2++) != 0)
+        if ((c = *(char *)s1 - *(char *)s2) != 0 || !*(char *)s1)
             return c;
+        s1++; s2++;
     }
     return 0;
 }
@@ -874,23 +872,22 @@ mystrstr(s1, s2)
 
 mystrtol(s)
 {
-    int v;
-    char c;
+    int v, c;
 
     while (myisspace(*(char *)s))
-        s = s + 1;
+        s++;
     v = 0;
     if (*(char *)s == '0' && *(char *)(s + 1) == 'x') {
-        s = s + 2;
+        s++; s++;
         while ((c = *(char *)s++) >= '0' && c <= '9' || (c | 0x20) >= 'a' && (c | 0x20) <= 'f') {
             if (c > '9')
                 c = (c | 0x20) - 39;
-            v = v * 16 + (c - '0');
+            v = v * 16 + c - '0';
         }
     }
     else {
         while ((c = *(char *)s++) >= '0' && c <= '9') {
-            v = v * 10 + (c - '0');
+            v = v * 10 + c - '0';
         }
     }
     return v;
