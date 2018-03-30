@@ -34,7 +34,29 @@ Context `m_ctx` is reusable for additional invokations of `RtccCompile` with all
 
 Returned `pfn` are usable until `m_ctx` is not destroyed with `RtccFree`.
 
-### Allowed syntax
+### API
+
+ - `RtccCompile([in] ctx, [in] source, [in, optional] allocsize)`
+
+   If `ctx` is new initializes internal buffers according to the optional `allocsize`. Then compiles inline C `source` to `ctx`, appending generated code to previously compiled code in `ctx` and returns a callable `pfn` pointer to the entry point of the first function in `source`.
+   
+ - `RtccFree([in] ctx)`
+ 
+   Deallocates `ctx` internal buffers, rendering previously compiled `pfn`s in `ctx` invalid.
+   
+ - `RtccGetSymbol([in] ctx, [in] name)`
+ 
+   Searches function `name` in `ctx` and returns a callable `pfn` pointer to its entry point or `0` (`NULL`) if not found. `RtccGetSymbol` can be used when compiling sources with multiple functions that call each other because OTCC can compile calls to forward references e.g. `f` calling `g` and `g` calling `f` in a single source code. 
+   
+ - `RtccPatchProto([in] addressof)`
+ 
+   Helper function that patches a native VB6 function to become a `pfn` calling trampoline. For instance a VB6 function with declaration `Function MyProto(byval pfn As Long, a1 As Long, a2 As Long, ...) As Long` can be patched with a call to `RtccPatchProto AddressOf MyProto` to jump at run-time to `pfn` with arguments `a1, a2, ...`.
+   
+   This allows calling `RtccCompile`d `pfn` without resorting to `CallWindowProc` or similar work-arounds that are usually slower that implementing simple trampolines with `RtccPatchProto`.
+
+### Allowed C syntax
+
+See `README` in `lib/ottc` for original Bellard's comments.
 
  - All local variables are `signed int`, including pointers.
  - Array indexing is not supported but global and local arrays declaration is possible.
