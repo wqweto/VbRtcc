@@ -902,15 +902,14 @@ __declspec(naked) void end_of_code(void) {}
 __declspec(dllimport) int __stdcall CryptBinaryToStringA (int, int, int, int, int);
 #define CRYPT_STRING_BASE64 1
 
-main(n, t)
+output_thunks(code, codesize, name)
 {
     int i, j;
-    int size = (int)end_of_code - (int)compile;
     char m_buffer[20000] = { 0 };
     char *m_thunks[100];
 
     int buflen = sizeof(m_buffer) / sizeof(*m_buffer);
-    CryptBinaryToStringA(compile, size, CRYPT_STRING_BASE64, m_buffer, &buflen);
+    CryptBinaryToStringA(code, codesize, CRYPT_STRING_BASE64, m_buffer, &buflen);
     char *src = m_buffer, *p = m_buffer;
     for (j = 0; *src; j++) {
         m_thunks[j] = p;
@@ -922,14 +921,19 @@ main(n, t)
         *p++ = 0;
     }
 
-    printf("' Size=%d\n", size);
+    printf("' Size=%d\n", codesize);
     for(i = 0; i < j; i++) {
         if (i % 10 == 0)
-            printf("Private Const STR_THUNK%d = _\n", i / 10 + 1);
+            printf("Private Const %s%d = _\n", name, i / 10 + 1);
         printf("    \"%s\"%s\n", m_thunks[i], i % 10 < 9 && i < j-1 ? " & _" : "");
     }
+}
 
-#ifdef _DEBUG
+main(n, t)
+{
+    output_thunks(compile, (int)end_of_code - (int)compile, "STR_THUNK");
+
+#ifdef _DEBUG 
     return test(n, t);
 #endif
 }
