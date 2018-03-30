@@ -50,7 +50,6 @@ L"{\n"
 L"    int i, p, l, ch, prec, prev_pr;\n"
 L"    int op_stack, op_idx;\n"
 L"    int val_stack, val_idx;\n"
-L"    int num_size;\n"
 L"\n"
 L"    op_idx = op_stack = alloca(4000);\n"
 L"    val_idx = val_stack = alloca(8000);\n"
@@ -87,8 +86,7 @@ L"            prec = *(char *)(l + ch);\n"
 L"            if (prec != TOK_WHITE) {\n"
 L"                if (prec == TOK_NUM) {\n"
 L"                    val_idx = val_idx + 8;\n"
-L"                    parse_num(p, val_idx, &num_size);\n"
-L"                    p = p + ((num_size-1) << 1);\n"
+L"                    p = fast_val(p, val_idx);\n"
 L"                } else if (prec == TOK_ADD) {\n"
 L"                    if (prev_pr >= TOK_ADD && prev_pr < TOK_NUM)\n"
 L"                        prec = TOK_UNARY;\n"
@@ -115,9 +113,14 @@ L"#define ASM_SUB_EAX_    _asm _emit 0x83 _asm _emit 0xe8 _asm _emit\n"
 L"#define ASM_FSTP_EAX    _asm _emit 0xdd _asm _emit 0x18\n"
 L"#define ASM_FLD_EAX     _asm _emit 0xdd _asm _emit 0x00\n"
 L"#define ASM_FLD_EAX_    _asm _emit 0xdd _asm _emit 0x40 _asm _emit\n"
+L"#define ASM_FADD_EAX    _asm _emit 0xdc _asm _emit 0x00\n"
 L"#define ASM_FADD_EAX_   _asm _emit 0xdc _asm _emit 0x40 _asm _emit\n"
+L"#define ASM_FADDP_ST1   _asm _emit 0xde _asm _emit 0xc1\n"
 L"#define ASM_FSUB_EAX_   _asm _emit 0xdc _asm _emit 0x60 _asm _emit\n"
+L"#define ASM_FMUL_EAX    _asm _emit 0xdc _asm _emit 0x08\n"
 L"#define ASM_FMUL_EAX_   _asm _emit 0xdc _asm _emit 0x48 _asm _emit\n"
+L"#define ASM_FMULP_ST1   _asm _emit 0xde _asm _emit 0xc9\n"
+L"#define ASM_FDIV_EAX    _asm _emit 0xdc _asm _emit 0x30\n"
 L"#define ASM_FDIV_EAX_   _asm _emit 0xdc _asm _emit 0x70 _asm _emit\n"
 L"#define ASM_FCHS        _asm _emit 0xd9 _asm _emit 0xe0\n"
 L"#define ASM_FILD_EAX    _asm _emit 0xdb _asm _emit 0x00\n"
@@ -127,8 +130,8 @@ L"#define ASM_FLD1        _asm _emit 0xd9 _asm _emit 0xe8\n"
 L"#define ASM_FLD_ST1     _asm _emit 0xd9 _asm _emit 0xc1\n"
 L"#define ASM_FPREM       _asm _emit 0xd9 _asm _emit 0xf8\n"
 L"#define ASM_F2XM1       _asm _emit 0xd9 _asm _emit 0xf0\n"
-L"#define ASM_FADDP_ST1   _asm _emit 0xde _asm _emit 0xc1\n"
 L"#define ASM_FSCALE      _asm _emit 0xd9 _asm _emit 0xfd\n"
+L"#define ASM_FLDZ        _asm _emit 0xd9 _asm _emit 0xee\n"
 L"\n"
 L"eval_stack(prec, op_stack, pop_idx, val_stack, pval_idx)\n"
 L"{\n"
@@ -236,29 +239,138 @@ L"    *(int *)pval_idx = val_idx;\n"
 L"    *(int *)pop_idx = op_idx;\n"
 L"}\n"
 L"\n"
-L"#define PARSE_FLAGS_DEFAULT 0xB14\n"
-L"#define VTBIT_R8 0x20\n"
-L"\n"
-L"parse_num(s, pdbl, psize)\n"
+L"fast_val(p, pdbl)\n"
 L"{\n"
-L"    int numparse, dig, variant_res;\n"
+L"    int ch, addr;\n"
+L"    int newval, esgn, eint, hasfrac;\n"
+L"    int intpart, fracpart, fracdiv, dbl10; /* doubles */\n"
 L"\n"
-L"    numparse = alloca(24);\n"
-L"    dig = alloca(30);\n"
-L"    variant_res = alloca(16);\n"
-L"    *(int *)numparse = 30;\n"
-L"    *(int *)(numparse + 4) = PARSE_FLAGS_DEFAULT;\n"
-L"    if (!VarParseNumFromStr(s, 0, 0, numparse, dig)) {\n"
-L"        if (!VarNumFromParseNum(numparse, dig, VTBIT_R8, variant_res)) {\n"
-L"            *(int *)pdbl = *(int *)(variant_res + 8);\n"
-L"            *(int *)(pdbl + 4) = *(int *)(variant_res + 12);\n"
-L"            *(int *)psize = *(int *)(numparse + 12); /* cchUsed */\n"
-L"            return;\n"
-L"        }\n"
+L"    intpart = alloca(8);\n"
+L"    fracpart = alloca(8);\n"
+L"    fracdiv = alloca(8);\n"
+L"    dbl10 = alloca(8);\n"
+L"    newval = esgn = hasfrac = 0;\n"
+L"    /* *(double *)intpart = *(double *)fracpart = 0 */\n"
+L"    ASM_FLDZ;\n"
+L"    ASM_MOV_EAX_(intpart);\n"
+L"    ASM_FSTP_EAX;\n"
+L"    ASM_FLDZ;\n"
+L"    ASM_MOV_EAX_(fracpart);\n"
+L"    ASM_FSTP_EAX;\n"
+L"    /* *(double *)fracdiv = 1 */\n"
+L"    ASM_FLD1;\n"
+L"    ASM_MOV_EAX_(fracdiv);\n"
+L"    ASM_FSTP_EAX;\n"
+L"    /* *(double *)dbl10 = 10 */\n"
+L"    ch = 10;\n"
+L"    addr = &ch;\n"
+L"    ASM_MOV_EAX_(addr);\n"
+L"    ASM_FILD_EAX;\n"
+L"    ASM_MOV_EAX_(dbl10);\n"
+L"    ASM_FSTP_EAX;\n"
+L"    while ((ch = *(short *)p)) {\n"
+L"        if (ch >= '0' && ch <= '9') {\n"
+L"            newval = 1;\n"
+L"            if (esgn) {\n"
+L"                eint = eint * 10 + ch - '0';\n"
+L"            } else {\n"
+L"                ch = ch - '0';\n"
+L"                if(!hasfrac) {\n"
+L"                    /* *(double *)intpart = *(double *)intpart * *(double*)dbl10 + ch; */\n"
+L"                    ASM_MOV_EAX_(intpart);\n"
+L"                    ASM_FLD_EAX;\n"
+L"                    ASM_MOV_EAX_(dbl10);\n"
+L"                    ASM_FMUL_EAX;\n"
+L"                    addr = &ch;\n"
+L"                    ASM_MOV_EAX_(addr);\n"
+L"                    ASM_FILD_EAX;\n"
+L"                    ASM_FADDP_ST1;\n"
+L"                    ASM_MOV_EAX_(intpart);\n"
+L"                    ASM_FSTP_EAX\n"
+L"                } else {\n"
+L"                    /* *(double *)fracpart = *(double *)fracpart * *(double*)dbl10 + ch; */\n"
+L"                    ASM_MOV_EAX_(fracpart);\n"
+L"                    ASM_FLD_EAX;\n"
+L"                    ASM_MOV_EAX_(dbl10);\n"
+L"                    ASM_FMUL_EAX;\n"
+L"                    addr = &ch;\n"
+L"                    ASM_MOV_EAX_(addr);\n"
+L"                    ASM_FILD_EAX;\n"
+L"                    ASM_FADDP_ST1;\n"
+L"                    ASM_MOV_EAX_(fracpart);\n"
+L"                    ASM_FSTP_EAX\n"
+L"                    /* *(double *)fracdiv = *(double *)fracdiv * *(double*)dbl10; */\n"
+L"                    ASM_MOV_EAX_(fracdiv);\n"
+L"                    ASM_FLD_EAX;\n"
+L"                    ASM_MOV_EAX_(dbl10);\n"
+L"                    ASM_FMUL_EAX;\n"
+L"                    ASM_MOV_EAX_(fracdiv);\n"
+L"                    ASM_FSTP_EAX\n"
+L"                }\n"
+L"            }\n"
+L"        } else if (ch == '.') {\n"
+L"            if (hasfrac)\n"
+L"                break;\n"
+L"            newval = 1;\n"
+L"            hasfrac = 1;\n"
+L"        } else if (ch == 'e' || ch == 'E') {\n"
+L"            if (esgn)\n"
+L"                break;\n"
+L"            esgn = newval;\n"
+L"            eint = 0;\n"
+L"        } else if (ch == '-') {\n"
+L"            if (esgn > 0)\n"
+L"                esgn = -1;\n"
+L"            else\n"
+L"                break;\n"
+L"        } else\n"
+L"            break;\n"
+L"        p++; p++;\n"
 L"    }\n"
-L"    *(int *)pdbl = 0;\n"
-L"    *(int *)(pdbl + 4) = 0;\n"
-L"    *(int *)psize = 1;\n"
+L"    /* *(double *)pdbl = newval * *(double *)intpart; */\n"
+L"    addr = &newval;\n"
+L"    ASM_MOV_EAX_(addr);\n"
+L"    ASM_FILD_EAX;\n"
+L"    ASM_MOV_EAX_(intpart);\n"
+L"    ASM_FMUL_EAX;\n"
+L"    ASM_MOV_EAX_(pdbl);\n"
+L"    ASM_FSTP_EAX\n"
+L"    if (hasfrac) {\n"
+L"        /* *(double *)pdbl = *(double *)pdbl + newval * *(double *)fracpart / *(double *)fracdiv; */\n"
+L"        addr = &newval;\n"
+L"        ASM_MOV_EAX_(addr);\n"
+L"        ASM_FILD_EAX;\n"
+L"        ASM_MOV_EAX_(fracpart);\n"
+L"        ASM_FMUL_EAX;\n"
+L"        ASM_MOV_EAX_(fracdiv);\n"
+L"        ASM_FDIV_EAX;\n"
+L"        ASM_MOV_EAX_(pdbl);\n"
+L"        ASM_FADD_EAX;\n"
+L"        ASM_FSTP_EAX\n"
+L"    }\n"
+L"    if (esgn) {\n"
+L"        /* *(double *)pdbl = *(double *)pdbl * pow(dbl10, esgn * eint); */\n"
+L"        addr = &esgn;\n"
+L"        ASM_MOV_EAX_(addr);\n"
+L"        ASM_FILD_EAX;\n"
+L"        addr = &eint;\n"
+L"        ASM_MOV_EAX_(addr);\n"
+L"        ASM_FILD_EAX;\n"
+L"        ASM_FMULP_ST1;\n"
+L"        ASM_MOV_EAX_(dbl10);\n"
+L"        ASM_FLD_EAX;\n"
+L"        ASM_FYL2X;\n"
+L"        ASM_FLD1;\n"
+L"        ASM_FLD_ST1;\n"
+L"        ASM_FPREM;\n"
+L"        ASM_F2XM1;\n"
+L"        ASM_FADDP_ST1;\n"
+L"        ASM_FSCALE;\n"
+L"        ASM_MOV_EAX_(pdbl);\n"
+L"        ASM_FMUL_EAX;\n"
+L"        ASM_FSTP_EAX;\n"
+L"    }\n"
+L"    return p;\n"
 L"}";
     pfn = compile(ctx, pinp, 0, 0);
 
@@ -266,7 +378,7 @@ L"}";
     wchar_t *expr;
 
     CoInitialize(0);
-    expr = L"4.2^5.1";
+    expr = L"(3.5) + 2.9 * (2 + -(1 + 2))";
     simple_eval(expr, &dbl1);
     (*(int (__stdcall *)())pfn)(expr, &dbl2);
     assert(dbl1 == dbl2);
@@ -292,7 +404,6 @@ simple_eval(s, pdbl)
     int i, p, l, ch, prec, prev_pr;
     int op_stack, op_idx;
     int val_stack, val_idx;
-    int num_size;
 
     op_idx = op_stack = alloca(4000);
     val_idx = val_stack = alloca(8000);
@@ -329,8 +440,7 @@ simple_eval(s, pdbl)
             if (prec != TOK_WHITE) {
                 if (prec == TOK_NUM) {
                     val_idx = val_idx + 8;
-                    parse_num(p, val_idx, &num_size);
-                    p = p + ((num_size-1) << 1);
+                    p = fast_val(p, val_idx);
                 } else if (prec == TOK_ADD) {
                     if (prev_pr >= TOK_ADD && prev_pr < TOK_NUM)
                         prec = TOK_UNARY;
@@ -357,9 +467,14 @@ simple_eval(s, pdbl)
 #define ASM_FSTP_EAX    _asm _emit 0xdd _asm _emit 0x18
 #define ASM_FLD_EAX     _asm _emit 0xdd _asm _emit 0x00
 #define ASM_FLD_EAX_    _asm _emit 0xdd _asm _emit 0x40 _asm _emit
+#define ASM_FADD_EAX    _asm _emit 0xdc _asm _emit 0x00
 #define ASM_FADD_EAX_   _asm _emit 0xdc _asm _emit 0x40 _asm _emit
+#define ASM_FADDP_ST1   _asm _emit 0xde _asm _emit 0xc1
 #define ASM_FSUB_EAX_   _asm _emit 0xdc _asm _emit 0x60 _asm _emit
+#define ASM_FMUL_EAX    _asm _emit 0xdc _asm _emit 0x08
 #define ASM_FMUL_EAX_   _asm _emit 0xdc _asm _emit 0x48 _asm _emit
+#define ASM_FMULP_ST1   _asm _emit 0xde _asm _emit 0xc9
+#define ASM_FDIV_EAX    _asm _emit 0xdc _asm _emit 0x30
 #define ASM_FDIV_EAX_   _asm _emit 0xdc _asm _emit 0x70 _asm _emit
 #define ASM_FCHS        _asm _emit 0xd9 _asm _emit 0xe0
 #define ASM_FILD_EAX    _asm _emit 0xdb _asm _emit 0x00
@@ -369,8 +484,8 @@ simple_eval(s, pdbl)
 #define ASM_FLD_ST1     _asm _emit 0xd9 _asm _emit 0xc1
 #define ASM_FPREM       _asm _emit 0xd9 _asm _emit 0xf8
 #define ASM_F2XM1       _asm _emit 0xd9 _asm _emit 0xf0
-#define ASM_FADDP_ST1   _asm _emit 0xde _asm _emit 0xc1
 #define ASM_FSCALE      _asm _emit 0xd9 _asm _emit 0xfd
+#define ASM_FLDZ        _asm _emit 0xd9 _asm _emit 0xee
 
 eval_stack(prec, op_stack, pop_idx, val_stack, pval_idx)
 {
@@ -478,6 +593,141 @@ eval_stack(prec, op_stack, pop_idx, val_stack, pval_idx)
     *(int *)pop_idx = op_idx;
 }
 
+fast_val(p, pdbl)
+{
+    int ch, addr;
+    int newval, esgn, eint, hasfrac;
+    int intpart, fracpart, fracdiv, dbl10; /* doubles */
+
+    intpart = alloca(8);
+    fracpart = alloca(8);
+    fracdiv = alloca(8);
+    dbl10 = alloca(8);
+    newval = esgn = hasfrac = 0;
+    /* *(double *)intpart = *(double *)fracpart = 0 */
+    ASM_FLDZ;
+    ASM_MOV_EAX_(intpart);
+    ASM_FSTP_EAX;
+    ASM_FLDZ;
+    ASM_MOV_EAX_(fracpart);
+    ASM_FSTP_EAX;
+    /* *(double *)fracdiv = 1 */
+    ASM_FLD1;
+    ASM_MOV_EAX_(fracdiv);
+    ASM_FSTP_EAX;
+    /* *(double *)dbl10 = 10 */
+    ch = 10;
+    addr = &ch;
+    ASM_MOV_EAX_(addr);
+    ASM_FILD_EAX;
+    ASM_MOV_EAX_(dbl10);
+    ASM_FSTP_EAX;
+    while ((ch = *(short *)p)) {
+        if (ch >= '0' && ch <= '9') {
+            newval = 1;
+            if (esgn) {
+                eint = eint * 10 + ch - '0';
+            } else {
+                ch = ch - '0';
+                if(!hasfrac) {
+                    /* *(double *)intpart = *(double *)intpart * *(double*)dbl10 + ch; */
+                    ASM_MOV_EAX_(intpart);
+                    ASM_FLD_EAX;
+                    ASM_MOV_EAX_(dbl10);
+                    ASM_FMUL_EAX;
+                    addr = &ch;
+                    ASM_MOV_EAX_(addr);
+                    ASM_FILD_EAX;
+                    ASM_FADDP_ST1;
+                    ASM_MOV_EAX_(intpart);
+                    ASM_FSTP_EAX
+                } else {
+                    /* *(double *)fracpart = *(double *)fracpart * *(double*)dbl10 + ch; */
+                    ASM_MOV_EAX_(fracpart);
+                    ASM_FLD_EAX;
+                    ASM_MOV_EAX_(dbl10);
+                    ASM_FMUL_EAX;
+                    addr = &ch;
+                    ASM_MOV_EAX_(addr);
+                    ASM_FILD_EAX;
+                    ASM_FADDP_ST1;
+                    ASM_MOV_EAX_(fracpart);
+                    ASM_FSTP_EAX
+                    /* *(double *)fracdiv = *(double *)fracdiv * *(double*)dbl10; */
+                    ASM_MOV_EAX_(fracdiv);
+                    ASM_FLD_EAX;
+                    ASM_MOV_EAX_(dbl10);
+                    ASM_FMUL_EAX;
+                    ASM_MOV_EAX_(fracdiv);
+                    ASM_FSTP_EAX
+                }
+            }
+        } else if (ch == '.') {
+            if (hasfrac)
+                break;
+            newval = 1;
+            hasfrac = 1;
+        } else if (ch == 'e' || ch == 'E') {
+            if (esgn)
+                break;
+            esgn = newval;
+            eint = 0;
+        } else if (ch == '-') {
+            if (esgn > 0)
+                esgn = -1;
+            else
+                break;
+        } else
+            break;
+        p++; p++;
+    }
+    /* *(double *)pdbl = newval * *(double *)intpart; */
+    addr = &newval;
+    ASM_MOV_EAX_(addr);
+    ASM_FILD_EAX;
+    ASM_MOV_EAX_(intpart);
+    ASM_FMUL_EAX;
+    ASM_MOV_EAX_(pdbl);
+    ASM_FSTP_EAX
+    if (hasfrac) {
+        /* *(double *)pdbl = *(double *)pdbl + newval * *(double *)fracpart / *(double *)fracdiv; */
+        addr = &newval;
+        ASM_MOV_EAX_(addr);
+        ASM_FILD_EAX;
+        ASM_MOV_EAX_(fracpart);
+        ASM_FMUL_EAX;
+        ASM_MOV_EAX_(fracdiv);
+        ASM_FDIV_EAX;
+        ASM_MOV_EAX_(pdbl);
+        ASM_FADD_EAX;
+        ASM_FSTP_EAX
+    }
+    if (esgn) {
+        /* *(double *)pdbl = *(double *)pdbl * pow(dbl10, esgn * eint); */
+        addr = &esgn;
+        ASM_MOV_EAX_(addr);
+        ASM_FILD_EAX;
+        addr = &eint;
+        ASM_MOV_EAX_(addr);
+        ASM_FILD_EAX;
+        ASM_FMULP_ST1;
+        ASM_MOV_EAX_(dbl10);
+        ASM_FLD_EAX;
+        ASM_FYL2X;
+        ASM_FLD1;
+        ASM_FLD_ST1;
+        ASM_FPREM;
+        ASM_F2XM1;
+        ASM_FADDP_ST1;
+        ASM_FSCALE;
+        ASM_MOV_EAX_(pdbl);
+        ASM_FMUL_EAX;
+        ASM_FSTP_EAX;
+    }
+    return p;
+}
+
+#if 0
 #define PARSE_FLAGS_DEFAULT 0xB14
 #define VTBIT_R8 0x20
 
@@ -502,3 +752,4 @@ parse_num(s, pdbl, psize)
     *(int *)(pdbl + 4) = 0;
     *(int *)psize = 1;
 }
+#endif
