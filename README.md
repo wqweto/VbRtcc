@@ -3,7 +3,7 @@ Runtime Tiny C Compiler for VB6
 
 ### Description
 
-VbRtcc is a fork of OTCC by Fabrice Bellard with additional tweaks -- relocatable code, stdcall calling convention, `short *` access, `_asm` for inline assembly, local and global arrays.
+VbRtcc is a fork of [OTCC by Fabrice Bellard](https://bellard.org/otcc/) with some additional tweaks -- relocatable code, stdcall calling convention, `short *` access, `_asm` for inline assembly, local and global arrays.
 
 ### Sample usage
 
@@ -32,7 +32,7 @@ All functions are compiled with stdcall calling convention and unresolved extern
 
 Context `m_ctx` is reusable for additional invokations of `RtccCompile` with all previous symbols in scope, so already compiled functions can be called from subsequent compilations.
 
-Returned `pfn` are usable until `m_ctx` is not destroyed with `RtccFree`.
+Returned `pfn` are usable until `m_ctx` is destroyed with `RtccFree`.
 
 ### API
 
