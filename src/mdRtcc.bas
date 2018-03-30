@@ -139,7 +139,6 @@ Public Sub RtccPatchProto(ByVal pfn As Long) '--- Helper by The trick
     Call CopyMemory(ByVal UnsignedAdd(pfn, 4), &H909090E1, 4)
 End Sub
 
-
 '= private ===============================================================
 
 Private Function pvGetThunkAddress() As Long
