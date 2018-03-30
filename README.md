@@ -57,6 +57,6 @@ Returned `pfn` are usable until `m_ctx` is not destroyed with `RtccFree`.
  
 ### ToDo
 
- - [x] Support `short` data type for Unicode strings
- - [x] Support `emit`
- - [ ] Impl get symbol address after compile
+ - [x] Support `short` data type (for Unicode strings)
+ - [x] Support inline `_asm _emit`
+ - [x] Implement get symbol address after compile
