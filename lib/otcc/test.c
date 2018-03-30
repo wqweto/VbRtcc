@@ -26,9 +26,10 @@ test(n, t) {
     ctx->vars = m_vars;
     ctx->mods = m_mods;
     //pinp = L"main2(n, t) { int v, c; c = L\"\\x12\\x34AAtest\"; v = GlobalAlloc(0x40, 148); *(int *)v = 148; GetVersionExA(v); return *(int *)(v + 4) * 100 + *(int *)(v + 8); }";
-    //pfn = compile(&ctx, pinp, 0, 0);
+    //pfn = compile(ctx, pinp, 0, 0);
     //pinp = L"main(n, t) { int v; v = GlobalAlloc(0x40, 148); *(int *)v = 148; GetVersionExA(v); return *(int *)(v + 4) * 100 + *(int *)(v + 8); }";
-    //pfn = compile(&ctx, pinp, 0, 0);
+    //pfn = compile(ctx, pinp, 0, 0);
+    //return (*(int (__stdcall *)())pfn)(n, t);
     //pinp = L"int a, b[100]; main(n, t) { int v, c; v = alloca(550); emit 0x90 0x90; *(int *)v = 55; c = L\"\\x12AF\\x34AAtest\"; eax = *(short *)c; if((eax & 2) != 2) eax = eax + eax; return eax; }";
     pinp = 
 L"#define TOK_FINAL     0\n"
