@@ -135,8 +135,7 @@ Public Sub RtccPatchProto(ByVal pfn As Long) '--- Helper by The trick
     ' 5:  90                      nop
     ' 6:  90                      nop
     ' 7:  90                      nop
-    Call CopyMemory(ByVal pfn, &HFF505958, 4)
-    Call CopyMemory(ByVal UnsignedAdd(pfn, 4), &H909090E1, 4)
+    Call CopyMemory(ByVal pfn, -802975883527609.7192@, 8)
 End Sub
 
 '= private ===============================================================
