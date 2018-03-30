@@ -53,19 +53,21 @@ Private Const CRYPT_STRING_BASE64           As Long = 1
 Private Declare Sub CopyMemory Lib "kernel32" Alias "RtlMoveMemory" (Destination As Any, Source As Any, ByVal Length As Long)
 Private Declare Function VirtualAlloc Lib "kernel32" (ByVal lpAddress As Long, ByVal dwSize As Long, ByVal flAllocationType As Long, ByVal flProtect As Long) As Long
 Private Declare Function VirtualFree Lib "kernel32" (ByVal lpAddress As Long, ByVal dwSize As Long, ByVal dwFreeType As Long) As Long
+Private Declare Function VirtualProtect Lib "kernel32" (ByVal lpAddress As Long, ByVal dwSize As Long, ByVal flNewProtect As Long, ByRef lpflOldProtect As Long) As Long
 Private Declare Function CryptStringToBinary Lib "crypt32" Alias "CryptStringToBinaryW" (ByVal pszString As Long, ByVal cchString As Long, ByVal dwFlags As Long, ByVal pbBinary As Long, ByRef pcbBinary As Long, ByRef pdwSkip As Long, ByRef pdwFlags As Long) As Long
 Private Declare Function CallWindowProc Lib "user32" Alias "CallWindowProcA" (ByVal lpPrevWndFunc As Long, ByVal hWnd As Long, Optional ByVal Msg As Long, Optional ByVal wParam As Long, Optional ByVal lParam As Long) As Long
 Private Declare Function GetCurrentProcess Lib "kernel32" () As Long
 Private Declare Function EnumProcessModules Lib "psapi" (ByVal hProcess As Long, lphModule As Any, ByVal cb As Long, lpcbNeeded As Any) As Long
+Private Declare Function StrStrA Lib "shlwapi" (ByVal pszFirst As Long, ByVal pszSrch As String) As Long
 
 '=========================================================================
 ' Constants and member variables
 '=========================================================================
 
-Private Const ALLOC_SIZE                    As Long = 2 ^ 16 - 32
+Private Const ALLOC_SIZE                    As Long = 2 ^ 16
 
 Private Type UcsRtccBufferType
-    m_data(0 To ALLOC_SIZE) As Byte
+    m_data()            As Byte
 End Type
 
 Public Type UcsRtccContextType
@@ -75,22 +77,25 @@ Public Type UcsRtccContextType
     m_glo               As Long
     m_vars              As Long
     m_state(0 To 31)    As Long
-    m_buffer()          As UcsRtccBufferType
+    m_buffer(0 To 3)    As UcsRtccBufferType
 End Type
 
 '=========================================================================
 ' Functions
 '=========================================================================
 
-Public Function RtccCompile(ctx As UcsRtccContextType, sSource As String) As Long
+Public Function RtccCompile(ctx As UcsRtccContextType, sSource As String, Optional ByVal AllocSize As Long = ALLOC_SIZE) As Long
     If ctx.m_prog = 0 Then
-        ctx.m_prog = VirtualAlloc(0, ALLOC_SIZE, MEM_COMMIT, PAGE_EXECUTE_READWRITE)
-        ReDim ctx.m_buffer(0 To 3) As UcsRtccBufferType
-        ctx.m_sym_stk = VarPtr(ctx.m_buffer(0))
-        ctx.m_glo = VarPtr(ctx.m_buffer(1))
-        ctx.m_vars = VarPtr(ctx.m_buffer(2))
-        ctx.m_mods = VarPtr(ctx.m_buffer(3))
-        Call EnumProcessModules(GetCurrentProcess(), ByVal ctx.m_mods, ALLOC_SIZE \ 4, ByVal 0)
+        ctx.m_prog = VirtualAlloc(0, AllocSize, MEM_COMMIT, PAGE_EXECUTE_READWRITE)
+        ReDim ctx.m_buffer(0).m_data(0 To AllocSize - 1) As Byte
+        ctx.m_sym_stk = VarPtr(ctx.m_buffer(0).m_data(0))
+        ReDim ctx.m_buffer(1).m_data(0 To AllocSize - 1) As Byte
+        ctx.m_glo = VarPtr(ctx.m_buffer(1).m_data(0))
+        ReDim ctx.m_buffer(2).m_data(0 To AllocSize - 1) As Byte
+        ctx.m_vars = VarPtr(ctx.m_buffer(2).m_data(0))
+        ReDim ctx.m_buffer(3).m_data(0 To 4000 - 1) As Byte
+        ctx.m_mods = VarPtr(ctx.m_buffer(3).m_data(0))
+        Call EnumProcessModules(GetCurrentProcess(), ByVal ctx.m_mods, 1000, ByVal 0)
     End If
     RtccCompile = CallWindowProc(pvGetThunkAddress, VarPtr(ctx), StrPtr(sSource))
 End Function
@@ -103,6 +108,37 @@ Public Sub RtccFree(ctx As UcsRtccContextType)
         ctx = uEmpty
     End If
 End Sub
+
+Public Function RtccGetSymbol(ctx As UcsRtccContextType, sName As String) As Long
+    Dim lPtr            As Long
+    
+    lPtr = StrStrA(ctx.m_sym_stk, " " & sName & " ")
+    If lPtr <> 0 Then
+        lPtr = UnsignedAdd(ctx.m_vars, UnsignedDiff(ctx.m_sym_stk, lPtr) * 8 + &H100)
+        Call CopyMemory(RtccGetSymbol, ByVal lPtr, 4)
+    End If
+End Function
+
+Public Sub RtccPatchProto(ByVal pfn As Long) '--- Helper by The trick
+    Dim bInIDE          As Boolean
+ 
+    Debug.Assert pvSetTrue(bInIDE)
+    If bInIDE Then
+        Call CopyMemory(pfn, ByVal UnsignedAdd(pfn, &H16), 4)
+    Else
+        Call VirtualProtect(pfn, 8, PAGE_EXECUTE_READWRITE, 0)
+    End If
+    ' 0:  58                      pop    eax
+    ' 1:  59                      pop    ecx
+    ' 2:  50                      push   eax
+    ' 3:  ff e1                   jmp    ecx
+    ' 5:  90                      nop
+    ' 6:  90                      nop
+    ' 7:  90                      nop
+    Call CopyMemory(ByVal pfn, &HFF505958, 4)
+    Call CopyMemory(ByVal UnsignedAdd(pfn, 4), &H909090E1, 4)
+End Sub
+
 
 '= private ===============================================================
 
@@ -127,4 +163,23 @@ Private Function FromBase64Array(sText As String) As Byte()
     ReDim baOutput(0 To lSize - 1) As Byte
     Call CryptStringToBinary(StrPtr(sText), Len(sText), CRYPT_STRING_BASE64, VarPtr(baOutput(0)), lSize, 0, dwDummy)
     FromBase64Array = baOutput
+End Function
+
+Private Function pvSetTrue(bValue As Boolean) As Boolean
+    bValue = True
+    pvSetTrue = True
+End Function
+
+Private Function UnsignedAdd(ByVal lUnsignedPtr As Long, ByVal lSignedOffset As Long) As Long
+    '--- note: safely add *signed* offset to *unsigned* ptr for *unsigned* retval w/o overflow in LARGEADDRESSAWARE processes
+    UnsignedAdd = ((lUnsignedPtr Xor &H80000000) + lSignedOffset) Xor &H80000000
+End Function
+
+Private Function UnsignedDiff(ByVal lUnsignedPtr1 As Long, ByVal lUnsignedPtr2 As Long) As Long
+    '--- note: retval is *signed* offset b/n *unsigned* ptr1 and *unsigned* ptr2 w/o overflow in LARGEADDRESSAWARE processes
+    If (lUnsignedPtr1 And &H80000000) <> (lUnsignedPtr2 And &H80000000) Then
+        UnsignedDiff = (lUnsignedPtr2 - (lUnsignedPtr1 Xor &H80000000)) Xor &H80000000
+    Else
+        UnsignedDiff = lUnsignedPtr2 - lUnsignedPtr1
+    End If
 End Function

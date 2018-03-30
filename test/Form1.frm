@@ -67,12 +67,14 @@ Private Sub Command1_Click()
         "   GetVersionExA(v); " & vbCrLf & _
         "   return *(int *)(v + 4) * 100 + *(int *)(v + 8); " & vbCrLf & _
         "}")
+    Debug.Assert RtccGetSymbol(m_ctx, "main") = pfn
     Print CallWindowProc(pfn), "&H" & Hex(pfn)
     
     pfn = RtccCompile(m_ctx, _
         "add(a, b, wParam, lParam) {" & vbCrLf & _
         "   return a*b;" & vbCrLf & _
         "}")
+    Debug.Assert RtccGetSymbol(m_ctx, "add") = pfn
     Print CallWindowProc(pfn, 13, 20), "&H" & Hex(pfn)
 End Sub
 
