@@ -64,7 +64,7 @@ Private Declare Function StrStrA Lib "shlwapi" (ByVal pszFirst As Long, ByVal ps
 ' Constants and member variables
 '=========================================================================
 
-Private Const ALLOC_SIZE                    As Long = 2 ^ 16
+Private Const ALLOC_SIZE                    As Long = 2 ^ 15
 
 Private Type UcsRtccBufferType
     m_data()            As Byte
@@ -91,7 +91,7 @@ Public Function RtccCompile(ctx As UcsRtccContextType, sSource As String, Option
         ctx.m_sym_stk = VarPtr(ctx.m_buffer(0).m_data(0))
         ReDim ctx.m_buffer(1).m_data(0 To AllocSize - 1) As Byte
         ctx.m_glo = VarPtr(ctx.m_buffer(1).m_data(0))
-        ReDim ctx.m_buffer(2).m_data(0 To AllocSize - 1) As Byte
+        ReDim ctx.m_buffer(2).m_data(0 To AllocSize * 8 - 1) As Byte
         ctx.m_vars = VarPtr(ctx.m_buffer(2).m_data(0))
         ReDim ctx.m_buffer(3).m_data(0 To 4000 - 1) As Byte
         ctx.m_mods = VarPtr(ctx.m_buffer(3).m_data(0))
