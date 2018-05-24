@@ -175,7 +175,7 @@ End Function
 
 Private Function UnsignedDiff(ByVal lUnsignedPtr1 As Long, ByVal lUnsignedPtr2 As Long) As Long
     '--- note: retval is *signed* offset b/n *unsigned* ptr1 and *unsigned* ptr2 w/o overflow in LARGEADDRESSAWARE processes
-    If (lUnsignedPtr1 And &H80000000) <> (lUnsignedPtr2 And &H80000000) Then
+    If (lUnsignedPtr1 Xor lUnsignedPtr2) < 0 Then
         UnsignedDiff = (lUnsignedPtr2 - (lUnsignedPtr1 Xor &H80000000)) Xor &H80000000
     Else
         UnsignedDiff = lUnsignedPtr2 - lUnsignedPtr1
