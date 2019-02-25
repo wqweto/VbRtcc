@@ -7,6 +7,10 @@ VbRtcc is a fork of [OTCC by Fabrice Bellard](https://bellard.org/otcc/) with so
 
 ### Sample usage
 
+First download and add `src\mdRtcc.bas` to your VB6 project so that all `Rtcc` prefixed functions are accessible (see `API` section below).
+
+Here is a sample form that on button click compiles a C program that calls `GetVersionEx` API function and returns current OS version.
+
 ```
 Private Declare Function CallWindowProc Lib "user32" Alias "CallWindowProcA" (ByVal lpPrevWndFunc As Long, Optional ByVal hWnd As Long, Optional ByVal Msg As Long, Optional ByVal wParam As Long, Optional ByVal lParam As Long) As Long
 
